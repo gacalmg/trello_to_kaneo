@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trello to Kaneo Converter</title>
+  <meta name="description" content="Converta um export JSON do Trello para o formato de importação de tarefas do Kaneo." />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #677085;
+      --border: #dfe4ec;
+      --primary: #0f62fe;
+      --primary-hover: #004dcc;
+      --success: #18794e;
+      --danger: #c62828;
+      --warning: #8a5a00;
+      --shadow: 0 14px 40px rgba(23, 32, 51, 0.08);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      width: min(980px, calc(100% - 32px));
+      margin: 48px auto;
+    }
+
+    header {
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 42px);
+      letter-spacing: -0.035em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 18px;
+    }
+
+    .drop-zone {
+      border: 2px dashed #b9c3d3;
+      border-radius: 14px;
+      padding: 42px 24px;
+      text-align: center;
+      transition: .18s ease;
+      background: #fbfcfe;
+      cursor: pointer;
+    }
+
+    .drop-zone.dragover {
+      border-color: var(--primary);
+      background: #f2f7ff;
+    }
+
+    .drop-zone strong { display: block; font-size: 18px; margin-bottom: 8px; }
+    .drop-zone span { color: var(--muted); }
+
+    input[type="file"] { display: none; }
+
+    button, .button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      background: var(--primary);
+      color: white;
+      padding: 11px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .15s ease;
+    }
+
+    button:hover, .button:hover { background: var(--primary-hover); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .button.secondary {
+      background: #eef3fb;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .button.secondary:hover { background: #e4eaf3; }
+
+    .upload-button { display: inline-block; margin-top: 16px; }
+
+    .section-title {
+      margin: 0 0 16px;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 7px;
+      font-weight: 700;
+    }
+
+    .field input[type="text"],
+    .field select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px 11px;
+      background: white;
+      color: var(--text);
+      font: inherit;
+      outline: none;
+    }
+
+    .field input:focus, .field select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.12);
+    }
+
+    .help {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .options {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .check {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      color: #354057;
+      font-size: 14px;
+    }
+
+    .check input { margin-top: 3px; }
+
+    .map-table {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .map-row {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .map-row:last-child { border-bottom: 0; }
+    .map-row > div { padding: 12px 14px; }
+    .map-row > div:first-child { border-right: 1px solid var(--border); }
+    .map-head { background: #f8fafc; font-size: 12px; color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+    .list-name { font-weight: 700; }
+    .list-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+    .status-input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      font: inherit;
+    }
+
+    .target-columns {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .target-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fbfcfe;
+    }
+
+    .target-row .field { min-width: 0; }
+
+    .slug-wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .slug-code {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px 11px;
+      background: #f4f6f9;
+      color: var(--text);
+      font: 600 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      outline: none;
+    }
+
+    .slug-code:not([readonly]) {
+      background: #fff;
+      border-color: #d6b45d;
+    }
+
+    .manual-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .icon-button {
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      background: #fff;
+      color: var(--danger);
+      border: 1px solid var(--border);
+      font-size: 18px;
+    }
+
+    .icon-button:hover {
+      background: #fff4f4;
+    }
+
+    .target-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .94em;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fbfcfe;
+    }
+
+    .stat .value { font-size: 24px; font-weight: 800; }
+    .stat .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .notice {
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 14px;
+      font-size: 13px;
+      line-height: 1.5;
+      border: 1px solid #f0dba5;
+      color: var(--warning);
+      background: #fffaf0;
+    }
+
+    .notice.error {
+      border-color: #efb5b5;
+      color: var(--danger);
+      background: #fff6f6;
+    }
+
+    .notice.success {
+      border-color: #b8dfca;
+      color: var(--success);
+      background: #f3fbf6;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+
+    details {
+      margin-top: 18px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    summary { cursor: pointer; font-weight: 700; }
+
+    pre {
+      margin: 12px 0 0;
+      max-height: 340px;
+      overflow: auto;
+      border-radius: 10px;
+      background: #101521;
+      color: #e8edf7;
+      padding: 16px;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .hidden { display: none !important; }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      margin: 24px 0 8px;
+    }
+
+    @media (max-width: 700px) {
+      .app { width: min(100% - 20px, 980px); margin: 20px auto; }
+      .panel { padding: 18px; }
+      .grid, .summary, .map-row, .target-row { grid-template-columns: 1fr; }
+      .map-row > div:first-child { border-right: 0; border-bottom: 1px solid var(--border); }
+      .map-head { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Trello to Kaneo Converter</h1>
+      <p class="subtitle">Converta um quadro exportado do Trello em um JSON pronto para o importador de projeto do Kaneo. Todo o processamento acontece no seu navegador.</p>
+    </header>
+
+    <section class="panel" id="uploadPanel">
+      <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Selecionar arquivo JSON do Trello">
+        <strong>Envie o JSON exportado do Trello</strong>
+        <span>Arraste o arquivo aqui ou clique para selecionar.</span>
+        <label class="button upload-button" for="fileInput">Selecionar JSON</label>
+        <input id="fileInput" type="file" accept="application/json,.json" />
+      </div>
+      <div id="uploadMessage"></div>
+    </section>
+
+    <section class="panel hidden" id="configPanel">
+      <h2 class="section-title">Configuração da conversão</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="defaultPriority">Prioridade padrão</label>
+          <select id="defaultPriority">
+            <option value="no-priority">no-priority</option>
+            <option value="low" selected>low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="urgent">urgent</option>
+          </select>
+          <p class="help">Usada quando nenhum label do Trello indicar uma prioridade reconhecível.</p>
+        </div>
+        <div class="field">
+          <label for="defaultUserId">userId padrão (opcional)</label>
+          <input id="defaultUserId" type="text" placeholder="Deixe vazio para não atribuir" />
+          <p class="help">Preencha apenas se o seu importador Kaneo aceitar esse identificador para o responsável.</p>
+        </div>
+      </div>
+
+      <div class="options">
+        <label class="check"><input id="inferPriority" type="checkbox" checked /> Inferir prioridade a partir do nome dos labels do Trello (urgent/high/medium/low e equivalentes em português).</label>
+        <label class="check"><input id="skipClosed" type="checkbox" checked /> Ignorar cartões arquivados/fechados do Trello.</label>
+        <label class="check"><input id="preserveExtras" type="checkbox" checked /> Preservar labels, checklists, links de anexos e URL original dentro da descrição.</label>
+      </div>
+
+      <h3 style="margin:24px 0 8px;font-size:16px;">Colunas de destino no Kaneo</h3>
+      <p class="help">Digite os nomes <strong>visíveis</strong> das colunas do seu projeto no Kaneo. O conversor calcula automaticamente o código interno usado pelo importador.</p>
+      <div class="target-columns" id="targetColumns"></div>
+      <div class="target-actions">
+        <button class="button secondary" id="addTargetColumn" type="button">+ Adicionar coluna</button>
+        <button class="button secondary" id="restoreDefaultColumns" type="button">Restaurar padrão do Kaneo</button>
+      </div>
+      <div class="notice">
+        <strong>Como o código é obtido:</strong> o Kaneo cria o código interno a partir do nome da coluna. Ex.: <code>Revisão Técnica</code> → <code>revisão-técnica</code>. 
+        <strong>Exceção:</strong> se a coluna foi renomeada depois de criada, o Kaneo mantém o código antigo. Nesse caso, marque <em>código manual</em>. Para descobrir o código exato, exporte uma tarefa dessa coluna no Kaneo e confira o campo <code>status</code>.
+      </div>
+
+      <h3 style="margin:24px 0 10px;font-size:16px;">Mapeamento das listas</h3>
+      <p class="help" style="margin-bottom:12px;">Para cada lista do Trello, escolha uma das colunas que você cadastrou acima ou selecione <strong>Ignorar esta lista</strong>. O conversor nunca envia uma lista ignorada para <code>planned</code>.</p>
+      <div class="map-table" id="mappingTable"></div>
+
+      <div class="notice"><strong>Proteção contra Backlog:</strong> <code>planned</code> e <code>archived</code> não podem ser usados como colunas de destino. Uma lista pode ser mapeada para uma coluna real do quadro ou ser ignorada.</div>
+
+      <div class="actions">
+        <button id="convertButton">Converter para Kaneo</button>
+        <button class="button secondary" id="resetButton" type="button">Escolher outro arquivo</button>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="resultPanel">
+      <h2 class="section-title">Arquivo convertido</h2>
+      <div class="summary">
+        <div class="stat"><div class="value" id="taskCount">0</div><div class="label">tarefas geradas</div></div>
+        <div class="stat"><div class="value" id="listCount">0</div><div class="label">listas mapeadas</div></div>
+        <div class="stat"><div class="value" id="closedCount">0</div><div class="label">cartões/listas ignorados</div></div>
+      </div>
+      <div id="resultMessage" class="notice success">Conversão concluída. Revise o preview e baixe o JSON.</div>
+      <div class="actions">
+        <button id="downloadButton">Baixar JSON do Kaneo</button>
+        <button class="button secondary" id="copyButton" type="button">Copiar JSON</button>
+      </div>
+      <details>
+        <summary>Ver preview do JSON</summary>
+        <pre id="preview"></pre>
+      </details>
+    </section>
+
+    <footer>Sem upload para servidor · conversão 100% local no navegador</footer>
+  </main>
+
+  <script>
+    (() => {
+      const DEFAULT_TARGET_COLUMNS = [
+        { id: "target-1", name: "To Do", slug: "to-do", manual: false },
+        { id: "target-2", name: "In Progress", slug: "in-progress", manual: false },
+        { id: "target-3", name: "In Review", slug: "in-review", manual: false },
+        { id: "target-4", name: "Done", slug: "done", manual: false },
+      ];
+
+      const cloneDefaultTargets = () => DEFAULT_TARGET_COLUMNS.map(column => ({ ...column }));
+
+      const state = {
+        trello: null,
+        sourceFileName: "trello-board.json",
+        converted: null,
+        listMap: new Map(),
+        ignoredClosed: 0,
+        targetColumns: cloneDefaultTargets(),
+        targetCounter: 4,
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const fileInput = $("fileInput");
+      const dropZone = $("dropZone");
+      const uploadMessage = $("uploadMessage");
+      const configPanel = $("configPanel");
+      const resultPanel = $("resultPanel");
+      const mappingTable = $("mappingTable");
+      const targetColumnsEl = $("targetColumns");
+
+      const escapeHtml = (value = "") => String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+      const normalize = (value = "") => String(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+
+      const slugify = (value = "") => normalize(value)
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+
+      // Mesma regra usada atualmente pelo Kaneo ao criar uma coluna.
+      const toKaneoSlug = (value = "") => {
+        const slug = String(value)
+          .normalize("NFKC")
+          .toLowerCase()
+          .trim()
+          .replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")
+          .replace(/^-+|-+$/g, "");
+        return /[\p{L}\p{N}]/u.test(slug) ? slug : "";
+      };
+
+      function inferStatus(listName) {
+        const n = normalize(listName);
+        if (/\b(arquiv|archive|closed)\b/.test(n)) return "archived";
+        if (/\b(backlog|planejad|planned|ideias?|ideas?)\b/.test(n)) return "planned";
+        if (/\b(done|complete|completed|concluid|finaliz|resolvid|feito)\b/.test(n)) return "done";
+        if (/\b(review|revis|qa|teste|test)\b/.test(n)) return "in-review";
+        if (/\b(in progress|progress|andamento|fazendo|doing|execucao|desenvolvimento|working)\b/.test(n)) return "in-progress";
+        if (/\b(to do|todo|a fazer|pendente|pending|tarefas?)\b/.test(n)) return "to-do";
+        return "";
+      }
+
+      function inferPriority(labels, fallback) {
+        const ranking = { "no-priority": 0, low: 1, medium: 2, high: 3, urgent: 4 };
+        let best = fallback;
+        let bestRank = ranking[fallback] ?? 1;
+
+        for (const label of labels || []) {
+          const n = normalize(label?.name || "");
+          if (!n) continue;
+          let candidate = null;
+          if (/(priority\s*:\s*)?(urgent|urgente|critical|critica|critico|p0)\b/.test(n)) candidate = "urgent";
+          else if (/(priority\s*:\s*)?(high|alta|alto|p1)\b/.test(n)) candidate = "high";
+          else if (/(priority\s*:\s*)?(medium|media|medio|p2)\b/.test(n)) candidate = "medium";
+          else if (/(priority\s*:\s*)?(low|baixa|baixo|p3)\b/.test(n)) candidate = "low";
+          else if (/(no[- ]?priority|sem prioridade|none)\b/.test(n)) candidate = "no-priority";
+
+          if (candidate && ranking[candidate] > bestRank) {
+            best = candidate;
+            bestRank = ranking[candidate];
+          }
+        }
+        return best;
+      }
+
+      function isoOrNull(value) {
+        if (!value) return null;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+      }
+
+      function buildChecklistIndex(data) {
+        const byCard = new Map();
+        for (const checklist of data.checklists || []) {
+          const cardId = checklist.idCard;
+          if (!cardId) continue;
+          if (!byCard.has(cardId)) byCard.set(cardId, []);
+          byCard.get(cardId).push(checklist);
+        }
+        return byCard;
+      }
+
+      function buildDescription(card, checklists, preserveExtras, sourceListName) {
+        const chunks = [];
+        const original = (card.desc || "").trim();
+        if (original) chunks.push(original);
+        if (!preserveExtras) return original;
+
+        const metadata = [];
+        if (sourceListName) metadata.push(`Lista original do Trello: ${sourceListName}`);
+        const labels = (card.labels || []).map(l => l?.name).filter(Boolean);
+        if (labels.length) metadata.push(`Labels do Trello: ${labels.join(", ")}`);
+
+        const cardChecklists = checklists.get(card.id) || [];
+        for (const checklist of cardChecklists) {
+          const items = (checklist.checkItems || []).map(item => {
+            const mark = item.state === "complete" ? "x" : " ";
+            return `- [${mark}] ${item.name}`;
+          });
+          if (items.length) {
+            metadata.push(`Checklist — ${checklist.name || "Sem título"}\n${items.join("\n")}`);
+          }
+        }
+
+        const attachments = (card.attachments || [])
+          .map(a => a?.url || a?.edgeColor || null)
+          .filter(url => typeof url === "string" && /^https?:\/\//i.test(url));
+        if (attachments.length) metadata.push(`Anexos do Trello:\n${attachments.map(url => `- ${url}`).join("\n")}`);
+
+        const sourceUrl = card.url || card.shortUrl;
+        if (sourceUrl) metadata.push(`Cartão original: ${sourceUrl}`);
+
+        if (metadata.length) chunks.push(`---\nDados preservados do Trello\n${metadata.join("\n\n")}`);
+        return chunks.join("\n\n");
+      }
+
+      function getValidTargetColumns() {
+        const seen = new Set();
+        return state.targetColumns.filter(column => {
+          const slug = (column.slug || "").trim();
+          if (!column.name.trim() || !slug || slug === "planned" || slug === "archived" || seen.has(slug)) return false;
+          seen.add(slug);
+          return true;
+        });
+      }
+
+      function suggestTargetSlug(listName) {
+        const targets = getValidTargetColumns();
+        const exact = toKaneoSlug(listName);
+        const exactTarget = targets.find(column => column.slug === exact);
+        if (exactTarget) return exactTarget.slug;
+
+        const semantic = inferStatus(listName);
+        const semanticTarget = targets.find(column => column.slug === semantic);
+        if (semanticTarget) return semanticTarget.slug;
+
+        const normalizedName = normalize(listName);
+        const nameTarget = targets.find(column => normalize(column.name) === normalizedName);
+        return nameTarget?.slug || "";
+      }
+
+      function renderTargetColumns() {
+        targetColumnsEl.innerHTML = state.targetColumns.map(column => `
+          <div class="target-row" data-target-id="${escapeHtml(column.id)}">
+            <div class="field">
+              <label>Nome visível no Kaneo</label>
+              <input class="target-name" type="text" value="${escapeHtml(column.name)}" placeholder="Ex.: Em validação" />
+            </div>
+            <div class="field">
+              <label>Código interno</label>
+              <div class="slug-wrap">
+                <input class="slug-code target-slug" type="text" value="${escapeHtml(column.slug)}" ${column.manual ? "" : "readonly"} />
+                <label class="manual-toggle"><input class="target-manual" type="checkbox" ${column.manual ? "checked" : ""} /> código manual (coluna renomeada)</label>
+              </div>
+            </div>
+            <button class="icon-button target-remove" type="button" title="Remover coluna" aria-label="Remover coluna">×</button>
+          </div>
+        `).join("");
+
+        targetColumnsEl.querySelectorAll(".target-row").forEach(row => {
+          const id = row.dataset.targetId;
+          const column = state.targetColumns.find(item => item.id === id);
+          if (!column) return;
+
+          const nameInput = row.querySelector(".target-name");
+          const slugInput = row.querySelector(".target-slug");
+          const manualInput = row.querySelector(".target-manual");
+
+          nameInput.addEventListener("input", () => {
+            column.name = nameInput.value;
+            if (!column.manual) {
+              column.slug = toKaneoSlug(column.name);
+              slugInput.value = column.slug;
+            }
+            renderMapping();
+          });
+
+          manualInput.addEventListener("change", () => {
+            column.manual = manualInput.checked;
+            if (!column.manual) {
+              column.slug = toKaneoSlug(column.name);
+              slugInput.value = column.slug;
+              slugInput.setAttribute("readonly", "");
+            } else {
+              slugInput.removeAttribute("readonly");
+              slugInput.focus();
+              slugInput.select();
+            }
+            renderMapping();
+          });
+
+          slugInput.addEventListener("input", () => {
+            if (!column.manual) return;
+            column.slug = slugInput.value.trim();
+            renderMapping();
+          });
+
+          row.querySelector(".target-remove").addEventListener("click", () => {
+            state.targetColumns = state.targetColumns.filter(item => item.id !== id);
+            renderTargetColumns();
+            renderMapping();
+          });
+        });
+      }
+
+      function validateTargetColumns() {
+        if (!state.targetColumns.length) return "Cadastre pelo menos uma coluna de destino do Kaneo.";
+        const seen = new Set();
+        for (const column of state.targetColumns) {
+          const name = column.name.trim();
+          const slug = (column.slug || "").trim();
+          if (!name) return "Há uma coluna de destino sem nome.";
+          if (!slug) return `Não foi possível gerar um código para a coluna “${name}”.`;
+          if (slug === "planned" || slug === "archived") return `O código “${slug}” é reservado pelo Kaneo e não representa uma coluna normal do quadro.`;
+          if (seen.has(slug)) return `Duas colunas estão usando o mesmo código interno: “${slug}”.`;
+          seen.add(slug);
+        }
+        return "";
+      }
+
+      function renderMapping() {
+        if (!state.trello) {
+          mappingTable.innerHTML = "";
+          return;
+        }
+
+        const lists = state.trello.lists || [];
+        const cardCounts = new Map();
+        for (const card of state.trello.cards || []) {
+          cardCounts.set(card.idList, (cardCounts.get(card.idList) || 0) + 1);
+        }
+
+        const targets = getValidTargetColumns();
+        const validSlugs = new Set(targets.map(column => column.slug));
+
+        mappingTable.innerHTML = `
+          <div class="map-row map-head"><div>Lista do Trello</div><div>Coluna no Kaneo</div></div>
+          ${lists.map(list => {
+            const previous = state.listMap.get(list.id);
+            const selected = previous === "__ignore__" || validSlugs.has(previous)
+              ? previous
+              : suggestTargetSlug(list.name);
+            state.listMap.set(list.id, selected || "");
+            const options = targets.map(column => `
+              <option value="${escapeHtml(column.slug)}" ${selected === column.slug ? "selected" : ""}>${escapeHtml(column.name)} → ${escapeHtml(column.slug)}</option>
+            `).join("");
+            return `
+              <div class="map-row">
+                <div>
+                  <div class="list-name">${escapeHtml(list.name || "Sem nome")}</div>
+                  <div class="list-meta">${cardCounts.get(list.id) || 0} cartão(ões)</div>
+                </div>
+                <div>
+                  <select class="status-input" data-list-id="${escapeHtml(list.id)}" aria-label="Coluna Kaneo para ${escapeHtml(list.name || "lista")}">
+                    <option value="" ${selected === "" ? "selected" : ""}>Escolha uma coluna…</option>
+                    ${options}
+                    <option value="__ignore__" ${selected === "__ignore__" ? "selected" : ""}>Ignorar esta lista</option>
+                  </select>
+                </div>
+              </div>`;
+          }).join("")}
+        `;
+
+        mappingTable.querySelectorAll(".status-input").forEach(input => {
+          input.addEventListener("change", () => state.listMap.set(input.dataset.listId, input.value.trim()));
+        });
+      }
+
+      function validateTrello(data) {
+        if (!data || typeof data !== "object") throw new Error("O arquivo não contém um objeto JSON válido.");
+        if (!Array.isArray(data.cards)) throw new Error("Não encontrei o array 'cards'. Use o JSON exportado diretamente de um quadro do Trello.");
+        if (!Array.isArray(data.lists)) throw new Error("Não encontrei o array 'lists'. Use o JSON exportado diretamente de um quadro do Trello.");
+      }
+
+      async function loadFile(file) {
+        uploadMessage.innerHTML = "";
+        resultPanel.classList.add("hidden");
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          validateTrello(data);
+          state.trello = data;
+          state.sourceFileName = file.name || "trello-board.json";
+          state.converted = null;
+          renderTargetColumns();
+          renderMapping();
+          configPanel.classList.remove("hidden");
+          uploadMessage.innerHTML = `<div class="notice success"><strong>${escapeHtml(file.name)}</strong> carregado com ${data.cards.length} cartão(ões) e ${data.lists.length} lista(s).</div>`;
+          configPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (error) {
+          state.trello = null;
+          configPanel.classList.add("hidden");
+          resultPanel.classList.add("hidden");
+          uploadMessage.innerHTML = `<div class="notice error">${escapeHtml(error.message || "Não foi possível ler o arquivo.")}</div>`;
+        }
+      }
+
+      function convert() {
+        if (!state.trello) return;
+
+        mappingTable.querySelectorAll(".status-input").forEach(input => {
+          state.listMap.set(input.dataset.listId, input.value.trim());
+        });
+
+        const defaultPriority = $("defaultPriority").value;
+        const defaultUserId = $("defaultUserId").value.trim();
+        const shouldInferPriority = $("inferPriority").checked;
+        const skipClosed = $("skipClosed").checked;
+        const preserveExtras = $("preserveExtras").checked;
+        const checklists = buildChecklistIndex(state.trello);
+        const listNames = new Map((state.trello.lists || []).map(list => [list.id, list.name || "Sem nome"]));
+
+        const targetError = validateTargetColumns();
+        if (targetError) {
+          alert(targetError);
+          return;
+        }
+
+        const allowedStatuses = new Set([...state.targetColumns.map(column => column.slug.trim()), "__ignore__"]);
+        const unmappedLists = (state.trello.lists || []).filter(list => {
+          const mapped = state.listMap.get(list.id) || "";
+          return !mapped || !allowedStatuses.has(mapped);
+        });
+        if (unmappedLists.length) {
+          const names = unmappedLists.map(list => `“${list.name || "Sem nome"}”`).join(", ");
+          alert(`Mapeie todas as listas antes de converter. Falta definir: ${names}`);
+          return;
+        }
+
+        state.ignoredClosed = 0;
+        const tasks = [];
+        const warnings = [];
+
+        for (const card of state.trello.cards || []) {
+          if (card.closed && skipClosed) {
+            state.ignoredClosed++;
+            continue;
+          }
+
+          const mappedStatus = state.listMap.get(card.idList) || "";
+          if (mappedStatus === "__ignore__") {
+            state.ignoredClosed++;
+            continue;
+          }
+          const status = mappedStatus;
+
+          const priority = shouldInferPriority
+            ? inferPriority(card.labels || [], defaultPriority)
+            : defaultPriority;
+
+          const task = {
+            title: String(card.name || "Sem título"),
+            description: buildDescription(card, checklists, preserveExtras, listNames.get(card.idList)),
+            status,
+            priority,
+            startDate: isoOrNull(card.start),
+            dueDate: isoOrNull(card.due),
+          };
+
+          if (defaultUserId) task.userId = defaultUserId;
+          tasks.push(task);
+        }
+
+        state.converted = { tasks };
+        $("taskCount").textContent = String(tasks.length);
+        $("listCount").textContent = String((state.trello.lists || []).filter(list => state.listMap.get(list.id) && state.listMap.get(list.id) !== "__ignore__").length);
+        $("closedCount").textContent = String(state.ignoredClosed);
+        $("preview").textContent = JSON.stringify(state.converted, null, 2);
+
+        const resultMessage = $("resultMessage");
+        const statusCounts = tasks.reduce((acc, task) => {
+          acc[task.status] = (acc[task.status] || 0) + 1;
+          return acc;
+        }, {});
+        const usedTargets = state.targetColumns.filter(column => statusCounts[column.slug]);
+        const statusSummary = usedTargets
+          .map(column => `${column.name}: ${statusCounts[column.slug] || 0}`)
+          .join(" · ");
+        resultMessage.className = warnings.length ? "notice" : "notice success";
+        resultMessage.textContent = `Conversão concluída sem tarefas em planned${statusSummary ? `. ${statusSummary}` : "."}`;
+
+        resultPanel.classList.remove("hidden");
+        resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function downloadJson() {
+        if (!state.converted) return;
+        const json = JSON.stringify(state.converted, null, 2);
+        const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const base = state.sourceFileName.replace(/\.json$/i, "") || "trello-board";
+        a.href = url;
+        a.download = `${base}-kaneo.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      async function copyJson() {
+        if (!state.converted) return;
+        const button = $("copyButton");
+        try {
+          await navigator.clipboard.writeText(JSON.stringify(state.converted, null, 2));
+          const original = button.textContent;
+          button.textContent = "Copiado";
+          setTimeout(() => button.textContent = original, 1400);
+        } catch {
+          alert("Não foi possível copiar automaticamente. Abra o preview e copie manualmente.");
+        }
+      }
+
+      function reset() {
+        state.trello = null;
+        state.converted = null;
+        state.listMap = new Map();
+        state.ignoredClosed = 0;
+        state.targetColumns = cloneDefaultTargets();
+        state.targetCounter = 4;
+        fileInput.value = "";
+        uploadMessage.innerHTML = "";
+        mappingTable.innerHTML = "";
+        renderTargetColumns();
+        configPanel.classList.add("hidden");
+        resultPanel.classList.add("hidden");
+        dropZone.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files?.[0];
+        if (file) loadFile(file);
+      });
+
+      dropZone.addEventListener("click", (event) => {
+        if (event.target.closest("label")) return;
+        fileInput.click();
+      });
+      dropZone.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          fileInput.click();
+        }
+      });
+      dropZone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        dropZone.classList.add("dragover");
+      });
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+      dropZone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dropZone.classList.remove("dragover");
+        const file = event.dataTransfer.files?.[0];
+        if (file) loadFile(file);
+      });
+
+      $("addTargetColumn").addEventListener("click", () => {
+        state.targetCounter += 1;
+        state.targetColumns.push({
+          id: `target-${state.targetCounter}`,
+          name: "",
+          slug: "",
+          manual: false,
+        });
+        renderTargetColumns();
+        renderMapping();
+        const rows = targetColumnsEl.querySelectorAll(".target-row");
+        rows[rows.length - 1]?.querySelector(".target-name")?.focus();
+      });
+
+      $("restoreDefaultColumns").addEventListener("click", () => {
+        state.targetColumns = cloneDefaultTargets();
+        state.targetCounter = 4;
+        renderTargetColumns();
+        renderMapping();
+      });
+
+      renderTargetColumns();
+
+      $("convertButton").addEventListener("click", convert);
+      $("downloadButton").addEventListener("click", downloadJson);
+      $("copyButton").addEventListener("click", copyJson);
+      $("resetButton").addEventListener("click", reset);
+    })();
+  </script>
+</body>
+</html>
